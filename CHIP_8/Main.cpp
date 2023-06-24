@@ -64,12 +64,34 @@ namespace chipotto
 			Opcodes[0xE] = std::bind(&Emulator::OpcodeE, this, std::placeholders::_1);
 			Opcodes[0xF] = std::bind(&Emulator::OpcodeF, this, std::placeholders::_1);
 
-			//FINISH IMPLEMENTATION OF SPRITES
-			MemoryMapping[0x0] = 0xF0;
-			MemoryMapping[0x1] = 0x90;
-			MemoryMapping[0x2] = 0x90;
-			MemoryMapping[0x3] = 0x90;
-			MemoryMapping[0x4] = 0xF0;
+			const unsigned int FONTSET_SIZE = 80;
+
+			uint8_t fontset[FONTSET_SIZE] =
+			{
+				0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+				0x20, 0x60, 0x20, 0x20, 0x70, // 1
+				0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+				0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+				0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+				0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+				0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+				0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+				0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+				0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+				0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+				0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+				0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+				0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+				0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+				0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+			};
+
+			for (unsigned int i = 0; i < FONTSET_SIZE; i += 5) {
+				for (unsigned int j = 0; j < 5; j++) {
+					MemoryMapping[ i / 5 * 0x32 + j] = fontset[i + j];
+				}
+			}
+
 
 			Window = SDL_CreateWindow("Chip-8", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width * 10, height * 10, 0);
 			if (!Window)
@@ -298,6 +320,20 @@ namespace chipotto
 				else Registers[0xF] = 0;
 				Registers[registerX_index] += Registers[registerY_index];
 				std::cout << "ADD V" << (int)registerX_index << ", V" << (int)registerY_index;
+				return OpcodeStatus::IncrementPC;
+			}
+			else if ((opcode & 0xF) == 0x5) //SUB Vx, Vy 0x80D5
+			{
+				uint8_t registerX_index = (opcode >> 8) & 0xF;
+				uint8_t registerY_index = (opcode >> 4) & 0xF;
+
+				if (Registers[registerX_index] > Registers[registerY_index])
+					Registers[0xF] = 1;
+				else 
+					Registers[0xF] = 0;
+
+				Registers[registerX_index] -= Registers[registerY_index];
+				std::cout << "SUB V" << (int)registerX_index << ", V" << (int)registerY_index;
 				return OpcodeStatus::IncrementPC;
 			}
 			else if ((opcode & 0xF) == 0xE)
