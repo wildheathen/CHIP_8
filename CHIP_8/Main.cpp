@@ -5,6 +5,7 @@
 #include <iostream>
 #include <functional>
 #include <unordered_map>
+#include <map>
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 
@@ -23,29 +24,37 @@ namespace chipotto
 	class Emulator
 	{
 	public:
+		
+		const int SPEED = 1000;
 		Emulator()
 		{
-			KeyboardMap[SDLK_1] = 0x0;
-			KeyboardMap[SDLK_2] = 0x1;
-			KeyboardMap[SDLK_3] = 0x2;
-			KeyboardMap[SDLK_4] = 0x3;
-			KeyboardMap[SDLK_q] = 0x4;
-			KeyboardMap[SDLK_w] = 0x5;
-			KeyboardMap[SDLK_e] = 0x6;
-			KeyboardMap[SDLK_r] = 0x7;
-			KeyboardMap[SDLK_a] = 0x8;
-			KeyboardMap[SDLK_s] = 0x9;
-			KeyboardMap[SDLK_d] = 0xA;
-			KeyboardMap[SDLK_f] = 0xB;
-			KeyboardMap[SDLK_z] = 0xC;
-			KeyboardMap[SDLK_x] = 0xD;
-			KeyboardMap[SDLK_c] = 0xE;
-			KeyboardMap[SDLK_v] = 0xF;
+			fill(keys.begin(), keys.end(), false);
 
-			for (const auto& pair : KeyboardMap)
+			keymap.insert({ SDLK_1, 0x1 });
+			keymap.insert({ SDLK_2, 0x2 });
+			keymap.insert({ SDLK_3, 0x3 });
+			keymap.insert({ SDLK_4, 0xC });
+
+			keymap.insert({ SDLK_q, 0x4 });
+			keymap.insert({ SDLK_w, 0x5 });
+			keymap.insert({ SDLK_e, 0x6 });
+			keymap.insert({ SDLK_r, 0xD });
+
+			keymap.insert({ SDLK_a, 0x7 });
+			keymap.insert({ SDLK_s, 0x8 });
+			keymap.insert({ SDLK_d, 0x9 });
+			keymap.insert({ SDLK_f, 0xE });
+
+			keymap.insert({ SDLK_z, 0xA });
+			keymap.insert({ SDLK_x, 0x0 });
+			keymap.insert({ SDLK_c, 0xB });
+			keymap.insert({ SDLK_v, 0xF });
+
+
+			/*for (const auto& pair : keymap)
 			{
 				KeyboardValuesMap[pair.second] = static_cast<SDL_Scancode>(pair.first);
-			}
+			}*/
 
 			Opcodes[0x0] = std::bind(&Emulator::Opcode0, this, std::placeholders::_1);
 			Opcodes[0x1] = std::bind(&Emulator::Opcode1, this, std::placeholders::_1);
@@ -133,7 +142,7 @@ namespace chipotto
 			file.close();
 		}
 
-		bool Tick()
+		bool Tick(Uint32 last_tick)
 		{
 			uint64_t tick = SDL_GetTicks64();
 
@@ -142,6 +151,9 @@ namespace chipotto
 				DelayTimer--;
 				DeltaTimerTicks = 17 + SDL_GetTicks64();
 			}
+			
+			//auto frame_start = SDL_GetTicks();
+			
 
 			SDL_Event event;
 			while (SDL_PollEvent(&event))
@@ -149,11 +161,26 @@ namespace chipotto
 				if (event.type == SDL_KEYDOWN)
 				{
 					SDL_Keycode key = event.key.keysym.sym;
-					if (KeyboardMap.contains(key))
+
+					if (keymap.find(key) != keymap.end())
 					{
-						Registers[WaitForKeyboardRegister_Index] = KeyboardMap[key];
-						Suspended = false;
-						PC += 2;
+						keys[keymap[key]] = true;
+
+						if (WaitingForKey)
+						{
+							Registers[WaitForKeyboardRegister_Index] = keymap[key];
+							WaitingForKey = false;
+
+							PC += 2;
+						}
+					}
+				}
+				if (event.type == SDL_KEYUP)
+				{
+					SDL_Keycode key = event.key.keysym.sym;
+					if (keymap.find(key) != keymap.end())
+					{
+						keys[keymap[key]] = false;
 					}
 				}
 				if (event.type == SDL_QUIT)
@@ -163,7 +190,12 @@ namespace chipotto
 			}
 			SDL_PumpEvents();
 
-			if (Suspended) return true;
+			if (WaitingForKey) return true;
+
+			//if (SDL_GetTicks() - last_tick > 16) {
+			//	//chip8.tickTimers();
+			//	last_tick = SDL_GetTicks();
+			//}
 
 			uint16_t opcode = MemoryMapping[PC + 1] + (static_cast<uint16_t>(MemoryMapping[PC]) << 8);
 			std::cout << std::hex << "0x" << PC << ": 0x" << opcode << "  -->  ";
@@ -175,7 +207,14 @@ namespace chipotto
 			{
 				PC += 2;
 			}
-			return status != OpcodeStatus::NotImplemented && status != OpcodeStatus::StackOverflow && status != OpcodeStatus::Error;
+
+			////TODO run with the option to speed up or slow down
+			//auto frame_end = SDL_GetTicks();
+			//if (frame_end - frame_start < 1000 / SPEED) //If running faster than desired speed, add delay
+			//	SDL_Delay(1000 / SPEED - (frame_end - frame_start)); //run at 500Hz by default
+
+			SDL_Delay(20);
+			return status != OpcodeStatus::NotImplemented && status != OpcodeStatus::StackOverflow && status != OpcodeStatus::Error;			
 		}
 
 		bool IsValid() const
@@ -436,27 +475,42 @@ namespace chipotto
 
 		OpcodeStatus OpcodeE(const uint16_t opcode)
 		{
-			if ((opcode & 0xFF) == 0xA1)
-			{
-				uint8_t register_index = (opcode >> 8) & 0xF;
-				std::cout << "SKNP V" << (int)register_index;
-				const uint8_t* keys_state = SDL_GetKeyboardState(nullptr);
-				if (keys_state[KeyboardValuesMap[Registers[register_index]]] == 0)
-				{
-					PC += 2;
-				}
-				return OpcodeStatus::IncrementPC;
-			}
-			else if ((opcode & 0xFF) == 0x9E)
+			if ((opcode & 0xFF) == 0x9E)
 			{
 				uint8_t register_index = (opcode >> 8) & 0xF;
 				std::cout << "SKP V" << (int)register_index;
-				const uint8_t* keys_state = SDL_GetKeyboardState(nullptr);
+				/*if (keys[keymap[register_index]])
+				{
+					PC += 2;
+				}*/
+				PC += keys[register_index] ? 2 : 0;
+				/*const uint8_t* keys_state = SDL_GetKeyboardState(nullptr);
 				if (keys_state[KeyboardValuesMap[Registers[register_index]]] == 1)
 				{
 					PC += 2;
+				}*/
+				return OpcodeStatus::NotIncrementPC;
+			}
+			else if ((opcode & 0xFF) == 0xA1)
+			{
+				uint8_t register_index = (opcode >> 8) & 0xF;
+				std::cout << "SKNP V" << (int)register_index;
+				/*if (!keys[keymap[register_index]])
+				{
+					PC += 2;
+				}*/
+				if (!keys[register_index])
+				{
+					PC += 2;
 				}
-				return OpcodeStatus::IncrementPC;
+				else
+					PC += 0;
+				/*const uint8_t* keys_state = SDL_GetKeyboardState(nullptr);
+				if (keys_state[KeyboardValuesMap[Registers[register_index]]] == 0)
+				{
+					PC += 2;
+				}*/
+				return OpcodeStatus::NotIncrementPC;
 			}
 			return OpcodeStatus::NotImplemented;
 		}
@@ -500,14 +554,17 @@ namespace chipotto
 				I = 5 * Registers[register_index];
 				return OpcodeStatus::IncrementPC;
 			}
+
 			else if ((opcode & 0xFF) == 0x0A)
 			{
 				uint8_t register_index = (opcode >> 8) & 0xF;
 				std::cout << "LD V" << (int)register_index << ", K";
+
 				WaitForKeyboardRegister_Index = register_index;
-				Suspended = true;
+				WaitingForKey = true;
 				return OpcodeStatus::WaitForKeyboard;
 			}
+
 			else if ((opcode & 0xFF) == 0x1E)
 			{
 				uint8_t register_index = (opcode >> 8) & 0xF;
@@ -548,8 +605,9 @@ namespace chipotto
 		std::array<uint16_t, 0x10> Stack;
 		std::array<std::function<OpcodeStatus(const uint16_t)>, 0x10> Opcodes;
 
-		std::unordered_map<SDL_Keycode, uint8_t> KeyboardMap;
-		std::array<SDL_Scancode, 0x10> KeyboardValuesMap;
+		std::map<SDL_Keycode, uint8_t> keymap;
+
+		//std::array<SDL_Scancode, 0x10> KeyboardValuesMap;
 
 		uint16_t I = 0x0;
 		uint8_t DelayTimer = 0x0;
@@ -557,7 +615,8 @@ namespace chipotto
 		uint16_t PC = 0x200;
 		uint8_t SP = 0xFF;
 
-		bool Suspended = false;
+		std::vector<bool> keys = std::vector<bool>(16);
+		bool WaitingForKey = false;
 		uint8_t WaitForKeyboardRegister_Index = 0;
 		uint64_t DeltaTimerTicks = 0;
 
@@ -566,6 +625,8 @@ namespace chipotto
 		SDL_Texture* Texture = nullptr;
 		int width = 64;
 		int height = 32;
+
+		
 	};
 }
 
@@ -585,7 +646,8 @@ int main(int argc, char** argv)
 		emulator.LoadFromFile("C:\\Users\\david\\Documents\\AIV_3\\C++\\CHIP_8\\CHIP_8\\rsc\\PONG");
 		while (true)
 		{
-			if (!emulator.Tick())
+			
+			if (!emulator.Tick(SDL_GetTicks()))
 			{
 				break;
 			}
