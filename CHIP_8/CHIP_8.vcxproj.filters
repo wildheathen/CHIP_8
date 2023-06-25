@@ -18,10 +18,18 @@
     <ClCompile Include="Main.cpp">
       <Filter>File di origine</Filter>
     </ClCompile>
+    <ClCompile Include="chip8.cpp">
+      <Filter>File di origine</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="rsc\PONG">
       <Filter>File di risorse</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="chip8.h">
+      <Filter>File di intestazione</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
